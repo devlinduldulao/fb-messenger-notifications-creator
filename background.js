@@ -32,7 +32,7 @@ function showTestNotification() {
   console.log('[Messenger Background] Showing test notification...');
   
   const notificationId = `test-notification-${Date.now()}`;
-  const iconUrl = chrome.runtime.getURL('icons/icon128.png');
+  const iconUrl = chrome.runtime.getURL('icons/icon128.jpeg');
   
   chrome.notifications.create(notificationId, {
     type: 'basic',
@@ -94,7 +94,7 @@ async function handleNewMessage(data) {
   
   // Create notification
   const notificationId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  const iconUrl = chrome.runtime.getURL('icons/icon128.png');
+  const iconUrl = chrome.runtime.getURL('icons/icon128.jpeg');
   
   let title, message;
   if (messageCount > 1) {
