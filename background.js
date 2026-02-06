@@ -1,6 +1,6 @@
-// Background service worker for Messenger VIP Notifications
+// Background service worker for Messenger Notifications
 
-console.log('[VIP Background] Service worker starting...');
+console.log('[Messenger Background] Service worker starting...');
 
 // Keep service worker alive
 const keepAlive = () => {
@@ -8,24 +8,20 @@ const keepAlive = () => {
 };
 setInterval(keepAlive, 20000);
 
+// Track unread messages for badge
+let unreadCount = 0;
+
 // Initialize default settings when extension is installed
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[VIP Background] Extension installed/updated');
-  chrome.storage.sync.get(['vipContacts', 'silentMode', 'notifiedMessages'], (result) => {
-    if (!result.vipContacts) {
-      // Default empty contact list - user will add their own
-      chrome.storage.sync.set({ 
-        vipContacts: [],
-        silentMode: false,
-        notifiedMessages: [] // Track which messages we've already notified about
-      });
-      console.log('[VIP Background] Initialized default settings');
-    } else {
-      console.log('[VIP Background] Existing settings found:', result);
+  console.log('[Messenger Background] Extension installed/updated');
+  chrome.storage.sync.get(['silentMode'], (result) => {
+    if (result.silentMode === undefined) {
+      chrome.storage.sync.set({ silentMode: false });
+      console.log('[Messenger Background] Initialized default settings');
     }
   });
   
-  // Test notification on install
+  // Show test notification on install
   setTimeout(() => {
     showTestNotification();
   }, 2000);
@@ -33,112 +29,82 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // Show a test notification
 function showTestNotification() {
-  console.log('[VIP Background] Showing test notification...');
+  console.log('[Messenger Background] Showing test notification...');
   
-  // Use unique ID each time
   const notificationId = `test-notification-${Date.now()}`;
   const iconUrl = chrome.runtime.getURL('icons/icon128.png');
-  
-  console.log('[VIP Background] Icon URL:', iconUrl);
   
   chrome.notifications.create(notificationId, {
     type: 'basic',
     iconUrl: iconUrl,
-    title: '✅ Messenger VIP Notifications Active',
-    message: 'You will now receive notifications from your VIP contacts!',
+    title: 'Messenger Notifications Active',
+    message: 'You will now receive notifications for new messages!',
     priority: 2,
     silent: false
   }, (createdId) => {
     if (chrome.runtime.lastError) {
-      console.error('[VIP Background] Test notification error:', chrome.runtime.lastError);
-      // Try with inline base64 icon as fallback
-      chrome.notifications.create(notificationId + '-fallback', {
-        type: 'basic',
-        iconUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAA7AAAAOwBeShxvQAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAGeSURBVFiF7ZY9TsNAEIW/XUMBHVdIygBCQqKioupGlFRUcASOwBG4AkdAVDQ0dEhQIaXhCnCI2CLYeChsJ46z2PYIiSd5Zc/Mzpt9u7NSCAGTPe2/BnBP+68B6ID6rwH0hPgMnADnwBgYdgReAK/AE3AHXAO7wBqwBDgwB14DE+BYVfe6AqiqAi/AIbALXKrqIvA1ARbAIbAD7AcGq5d9F0REBF4DB8ApcBkRiHfAsM/gqroN7APnwNUvAogX84hN4g64UdVZV6DGOgGFOAqZ6wNUIoIYEphpN6Z2nQAJICuF8N4xqBJB1Aj0jS9U1aQjUAtMAsjV7j+LqCVQl0DdCNQC+C5Bh+h8xKCjBL86ygqg7k2l7ypvlUAdALfSbwngE+ilCqgB/FaB9gJxI5AWAbdYJIAQsQjUjaAtgDqBpAhSBdQByE0gJYJOAPJSiIwAcpNIjKAVgJwkEiOw2w2eIJEYQVMATjsiMYL/ApAvCZEcQasEcluI1Ag6AciNIFVAdQKJEXRKILeFSI0gVUB1AHITSIygFYDcJP4B0S/XYf+QEQYAAAAASUVORK5CYII=',
-        title: '✅ Messenger VIP Notifications Active',
-        message: 'Notifications are working!',
-        priority: 2
-      }, (fallbackId) => {
-        if (chrome.runtime.lastError) {
-          console.error('[VIP Background] Fallback also failed:', chrome.runtime.lastError);
-        } else {
-          console.log('[VIP Background] Fallback notification shown:', fallbackId);
-        }
-      });
+      console.error('[Messenger Background] Notification error:', chrome.runtime.lastError);
     } else {
-      console.log('[VIP Background] Test notification created:', createdId);
+      console.log('[Messenger Background] Test notification created:', createdId);
     }
   });
 }
 
+// Update the extension badge
+function updateBadge(count) {
+  unreadCount = count;
+  if (count > 0) {
+    chrome.action.setBadgeText({ text: count.toString() });
+    chrome.action.setBadgeBackgroundColor({ color: '#FF3B30' });
+  } else {
+    chrome.action.setBadgeText({ text: '' });
+  }
+}
+
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[VIP Background] Received message:', message);
+  console.log('[Messenger Background] Received message:', message);
   
-  if (message.type === 'NEW_VIP_MESSAGE') {
+  if (message.type === 'NEW_MESSAGE') {
     handleNewMessage(message.data);
     sendResponse({ received: true, status: 'processing' });
-  } else if (message.type === 'GET_SETTINGS') {
-    chrome.storage.sync.get(['vipContacts', 'silentMode'], (result) => {
-      console.log('[VIP Background] Sending settings:', result);
-      sendResponse(result);
-    });
-    return true; // Keep channel open for async response
   } else if (message.type === 'TEST_NOTIFICATION') {
-    // Allow testing from popup or content script
     showTestNotification();
     sendResponse({ received: true, status: 'test sent' });
   }
   return true;
 });
 
-// Track total unread VIP messages for badge
-let unreadVipCount = 0;
-
-// Update the extension badge
-function updateBadge(count) {
-  unreadVipCount = count;
-  if (count > 0) {
-    chrome.action.setBadgeText({ text: count.toString() });
-    chrome.action.setBadgeBackgroundColor({ color: '#FF3B30' }); // Red badge
-  } else {
-    chrome.action.setBadgeText({ text: '' });
-  }
-}
-
 // Handle new message notification
 async function handleNewMessage(data) {
-  console.log('[VIP Background] *** handleNewMessage ***', data);
+  console.log('[Messenger Background] handleNewMessage:', data);
   
-  const { senderName, messagePreview, timestamp, messageCount } = data;
+  const { messageCount, totalUnread, timestamp } = data;
   
   // Check if silent mode is enabled
   const settings = await chrome.storage.sync.get(['silentMode']);
   
   if (settings.silentMode) {
-    console.log('[VIP Background] Silent mode enabled, skipping');
+    console.log('[Messenger Background] Silent mode enabled, skipping');
     return;
   }
   
   // Update badge count
-  updateBadge(unreadVipCount + (messageCount || 1));
+  updateBadge(totalUnread);
   
-  // Create unique notification ID
-  const notificationId = `vip-msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  
-  console.log('[VIP Background] Creating notification ID:', notificationId);
-  
-  // Use chrome.runtime.getURL for proper icon path
+  // Create notification
+  const notificationId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   const iconUrl = chrome.runtime.getURL('icons/icon128.png');
   
-  // Build title based on message count
   let title, message;
-  if (messageCount && messageCount > 1) {
-    title = `💬 ${senderName} (${messageCount} new)`;
-    message = `Latest: ${messagePreview || 'New messages'}`;
+  if (messageCount > 1) {
+    title = `${messageCount} new messages`;
+    message = `You have ${totalUnread} unread messages on Messenger`;
   } else {
-    title = `💬 ${senderName}`;
-    message = messagePreview || 'New message';
+    title = 'New message';
+    message = totalUnread > 1 
+      ? `You have ${totalUnread} unread messages on Messenger`
+      : 'You have a new message on Messenger';
   }
   
   chrome.notifications.create(notificationId, {
@@ -150,59 +116,39 @@ async function handleNewMessage(data) {
     silent: false
   }, (createdId) => {
     if (chrome.runtime.lastError) {
-      console.error('[VIP Background] Notification FAILED:', chrome.runtime.lastError);
-      tryFallbackNotification(notificationId, senderName, messagePreview);
+      console.error('[Messenger Background] Notification FAILED:', chrome.runtime.lastError);
     } else {
-      console.log('[VIP Background] ✓ Notification CREATED:', createdId);
+      console.log('[Messenger Background] Notification CREATED:', createdId);
     }
   });
 }
 
-// Fallback notification without icon
-function tryFallbackNotification(notificationId, senderName, messagePreview) {
-  console.log('[VIP Background] Trying fallback notification without custom icon...');
-  
-  chrome.notifications.create(notificationId + '-fallback', {
-    type: 'basic',
-    iconUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAA7AAAAOwBeShxvQAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAGeSURBVFiF7ZY9TsNAEIW/XUMBHVdIygBCQqKioupGlFRUcASOwBG4AkdAVDQ0dEhQIaXhCnCI2CLYeChsJ46z2PYIiSd5Zc/Mzpt9u7NSCAGTPe2/BnBP+68B6ID6rwH0hPgMnADnwBgYdgReAK/AE3AHXAO7wBqwBDgwB14DE+BYVfe6AqiqAi/AIbALXKrqIvA1ARbAIbAD7AcGq5d9F0REBF4DB8ApcBkRiHfAsM/gqroN7APnwNUvAogX84hN4g64UdVZV6DGOgGFOAqZ6wNUIoIYEphpN6Z2nQAJICuF8N4xqBJB1Aj0jS9U1aQjUAtMAsjV7j+LqCVQl0DdCNQC+C5Bh+h8xKCjBL86ygqg7k2l7ypvlUAdALfSbwngE+ilCqgB/FaB9gJxI5AWAbdYJIAQsQjUjaAtgDqBpAhSBdQByE0gJYJOAPJSiIwAcpNIjKAVgJwkEiOw2w2eIJEYQVMATjsiMYL/ApAvCZEcQasEcluI1Ag6AciNIFVAdQKJEXRKILeFSI0gVUB1AHITSIygFYDcJP4B0S/XYf+QEQYAAAAASUVORK5CYII=',
-    title: `💬 Message from ${senderName}`,
-    message: messagePreview || 'New message received',
-    priority: 2,
-    requireInteraction: true
-  }, (createdId) => {
-    if (chrome.runtime.lastError) {
-      console.error('[VIP Background] Fallback notification also failed:', chrome.runtime.lastError);
-    } else {
-      console.log('[VIP Background] Fallback notification created:', createdId);
-    }
-  });
-}
-
-// Handle notification click - focus on Facebook Messenger tab
+// Handle notification click - focus on Messenger tab
 chrome.notifications.onClicked.addListener((notificationId) => {
-  if (notificationId.startsWith('vip-msg-') || notificationId.startsWith('test-')) {
-    // Clear the badge when user clicks notification
-    updateBadge(0);
-    
-    // Find and focus the Messenger tab
-    chrome.tabs.query({ url: ['https://www.facebook.com/messages/*', 'https://www.messenger.com/*'] }, (tabs) => {
-      if (tabs.length > 0) {
-        chrome.tabs.update(tabs[0].id, { active: true });
-        chrome.windows.update(tabs[0].windowId, { focused: true });
-      } else {
-        // Open Messenger if no tab exists
-        chrome.tabs.create({ url: 'https://www.messenger.com/' });
-      }
-    });
-    chrome.notifications.clear(notificationId);
-  }
+  // Clear the badge
+  updateBadge(0);
+  
+  // Find and focus the Messenger tab
+  chrome.tabs.query({ url: ['https://www.facebook.com/messages/*', 'https://www.messenger.com/*'] }, (tabs) => {
+    if (tabs.length > 0) {
+      chrome.tabs.update(tabs[0].id, { active: true });
+      chrome.windows.update(tabs[0].windowId, { focused: true });
+    } else {
+      chrome.tabs.create({ url: 'https://www.messenger.com/' });
+    }
+  });
+  chrome.notifications.clear(notificationId);
 });
 
 // Clear badge when user views the messenger tab
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
-  const tab = await chrome.tabs.get(activeInfo.tabId);
-  if (tab.url && (tab.url.includes('facebook.com/messages') || tab.url.includes('messenger.com'))) {
-    updateBadge(0);
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab.url && (tab.url.includes('facebook.com/messages') || tab.url.includes('messenger.com'))) {
+      updateBadge(0);
+    }
+  } catch (e) {
+    // Tab might not exist
   }
 });
 
