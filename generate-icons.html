@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generate Extension Icons</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      text-align: center;
+      background: #f5f5f5;
+    }
+    h1 { color: #333; }
+    .icon-preview {
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      margin: 30px 0;
+      flex-wrap: wrap;
+    }
+    .icon-box {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .icon-box canvas {
+      display: block;
+      margin: 10px auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .icon-box p {
+      margin: 10px 0 0;
+      font-size: 14px;
+      color: #666;
+    }
+    button {
+      background: #0084ff;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 10px;
+    }
+    button:hover { background: #0066cc; }
+    .instructions {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 30px;
+      text-align: left;
+    }
+    .instructions ol { padding-left: 20px; }
+    .instructions li { margin: 10px 0; }
+    code {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔔 Generate Extension Icons</h1>
+  <p>Click the buttons below to download the icon files for your extension.</p>
+  
+  <div class="icon-preview">
+    <div class="icon-box">
+      <canvas id="icon16" width="16" height="16"></canvas>
+      <p>icon16.png</p>
+      <button onclick="downloadIcon(16)">Download 16x16</button>
+    </div>
+    <div class="icon-box">
+      <canvas id="icon48" width="48" height="48"></canvas>
+      <p>icon48.png</p>
+      <button onclick="downloadIcon(48)">Download 48x48</button>
+    </div>
+    <div class="icon-box">
+      <canvas id="icon128" width="128" height="128"></canvas>
+      <p>icon128.png</p>
+      <button onclick="downloadIcon(128)">Download 128x128</button>
+    </div>
+  </div>
+  
+  <button onclick="downloadAll()">📥 Download All Icons</button>
+  
+  <div class="instructions">
+    <h2>Instructions</h2>
+    <ol>
+      <li>Click each download button (or "Download All")</li>
+      <li>Save the PNG files to the <code>icons</code> folder in your extension directory</li>
+      <li>Make sure they are named exactly: <code>icon16.png</code>, <code>icon48.png</code>, <code>icon128.png</code></li>
+      <li>Your extension is now ready to install!</li>
+    </ol>
+  </div>
+  
+  <script>
+    // Draw icon on canvas
+    function drawIcon(size) {
+      const canvas = document.getElementById('icon' + size);
+      const ctx = canvas.getContext('2d');
+      
+      // Background circle - Facebook blue gradient
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#0084ff');
+      gradient.addColorStop(1, '#0066cc');
+      
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Message bubble
+      ctx.fillStyle = 'white';
+      const bubbleWidth = size * 0.55;
+      const bubbleHeight = size * 0.4;
+      const bubbleX = (size - bubbleWidth) / 2;
+      const bubbleY = size * 0.22;
+      const radius = size * 0.08;
+      
+      // Rounded rectangle for bubble
+      ctx.beginPath();
+      ctx.moveTo(bubbleX + radius, bubbleY);
+      ctx.lineTo(bubbleX + bubbleWidth - radius, bubbleY);
+      ctx.quadraticCurveTo(bubbleX + bubbleWidth, bubbleY, bubbleX + bubbleWidth, bubbleY + radius);
+      ctx.lineTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight - radius);
+      ctx.quadraticCurveTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight, bubbleX + bubbleWidth - radius, bubbleY + bubbleHeight);
+      ctx.lineTo(bubbleX + radius, bubbleY + bubbleHeight);
+      ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleHeight, bubbleX, bubbleY + bubbleHeight - radius);
+      ctx.lineTo(bubbleX, bubbleY + radius);
+      ctx.quadraticCurveTo(bubbleX, bubbleY, bubbleX + radius, bubbleY);
+      ctx.fill();
+      
+      // Bubble tail
+      ctx.beginPath();
+      ctx.moveTo(size * 0.35, bubbleY + bubbleHeight);
+      ctx.lineTo(size * 0.25, size * 0.72);
+      ctx.lineTo(size * 0.45, bubbleY + bubbleHeight);
+      ctx.fill();
+      
+      // VIP star badge
+      const starCenterX = size * 0.72;
+      const starCenterY = size * 0.72;
+      const starRadius = size * 0.18;
+      
+      // Red circle background for star
+      ctx.fillStyle = '#ff3b30';
+      ctx.beginPath();
+      ctx.arc(starCenterX, starCenterY, starRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw star
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      const spikes = 5;
+      const outerRadius = starRadius * 0.6;
+      const innerRadius = starRadius * 0.3;
+      
+      for (let i = 0; i < spikes * 2; i++) {
+        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+        const angle = (Math.PI / 2) + (i * Math.PI / spikes);
+        const x = starCenterX + Math.cos(angle) * radius;
+        const y = starCenterY - Math.sin(angle) * radius;
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    
+    // Download icon
+    function downloadIcon(size) {
+      const canvas = document.getElementById('icon' + size);
+      const link = document.createElement('a');
+      link.download = 'icon' + size + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+    
+    // Download all icons
+    function downloadAll() {
+      [16, 48, 128].forEach((size, index) => {
+        setTimeout(() => downloadIcon(size), index * 300);
+      });
+    }
+    
+    // Initialize
+    [16, 48, 128].forEach(drawIcon);
+  </script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messenger VIP Notifications</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>💬 VIP Notifications</h1>
+      <p class="subtitle">Get notified when important people message you</p>
+    </header>
+    
+    <section class="silent-mode-section">
+      <div class="toggle-container">
+        <label class="toggle">
+          <input type="checkbox" id="silentModeToggle">
+          <span class="slider"></span>
+        </label>
+        <div class="toggle-label">
+          <span class="toggle-title" id="silentModeLabel">🔔 Notifications ON</span>
+          <span class="toggle-description">Toggle silent mode when you need to focus</span>
+        </div>
+      </div>
+    </section>
+    
+    <section class="contacts-section">
+      <h2>VIP Contacts</h2>
+      <p class="section-description">Add names of people you want notifications for</p>
+      
+      <div class="add-contact">
+        <input type="text" id="contactInput" placeholder="Enter name (e.g., Mom, Wife, John)">
+        <button id="addContactBtn" class="btn-primary">Add</button>
+      </div>
+      
+      <div id="contactsList" class="contacts-list">
+        <!-- Contacts will be rendered here -->
+      </div>
+      
+      <div id="emptyState" class="empty-state">
+        <span class="empty-icon">👥</span>
+        <p>No VIP contacts yet</p>
+        <p class="empty-hint">Add your mother, wife, or close friends above</p>
+      </div>
+    </section>
+    
+    <section class="quick-add-section">
+      <h3>Quick Add Suggestions</h3>
+      <div class="quick-add-buttons">
+        <button class="quick-add-btn" data-name="Mom">+ Mom</button>
+        <button class="quick-add-btn" data-name="Dad">+ Dad</button>
+        <button class="quick-add-btn" data-name="Wife">+ Wife</button>
+        <button class="quick-add-btn" data-name="Husband">+ Husband</button>
+      </div>
+    </section>
+    
+    <section class="test-section">
+      <button id="testNotificationBtn" class="btn-test">🔔 Test Notification</button>
+      <p class="test-hint">Click to verify notifications are working</p>
+    </section>
+    
+    <footer>
+      <p class="status" id="statusMessage"></p>
+      <p class="footer-note">Works on messenger.com and facebook.com/messages</p>
+    </footer>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
