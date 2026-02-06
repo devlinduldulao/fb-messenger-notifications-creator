@@ -6,12 +6,7 @@
   "permissions": [
     "notifications",
     "storage",
-    "activeTab",
     "tabs"
-  ],
-  "host_permissions": [
-    "https://www.facebook.com/*",
-    "https://www.messenger.com/*"
   ],
   "background": {
     "service_worker": "background.js"
