@@ -6,7 +6,8 @@
   "permissions": [
     "notifications",
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs"
   ],
   "host_permissions": [
     "https://www.facebook.com/*",

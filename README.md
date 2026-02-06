@@ -6,10 +6,11 @@ Get desktop banner notifications when your important contacts (mother, wife, fri
 
 - **VIP Contact List**: Add specific people (Mom, Wife, friends) whose messages you want to be notified about
 - **Desktop Banner Notifications**: Get instant visual notifications when VIP contacts message you
+- **Badge Counter**: Red badge on the extension icon shows unread VIP message count
 - **Silent Mode Toggle**: Easily turn off notifications when you need to focus
-- **Works on Both Sites**: Monitors both `facebook.com/messages` and `messenger.com`
 - **Click to Open**: Click the notification to jump directly to the conversation
-- **Persistent Notifications**: Notifications stay visible until you interact with them
+- **Auto-Clear Badge**: Badge clears when you view the Messenger tab
+- **Works on Both Sites**: Monitors both `facebook.com/messages` and `messenger.com`
 
 ## Installation
 
@@ -52,6 +53,12 @@ Get desktop banner notifications when your important contacts (mother, wife, fri
 ### Removing Contacts
 
 - Click the **×** button next to any contact to remove them
+
+## Limitations
+
+- Facebook's title counter only increments for **new unread conversations**, not for each message within the same conversation
+- If your wife sends 10 messages in a row, you'll get notified when her **first** message arrives (while unread), but not for subsequent messages in that same conversation
+- The extension requires the Messenger tab to be open (can be in background)
 
 ## Troubleshooting
 
@@ -116,6 +123,8 @@ This extension:
 - **Does NOT** send any data to external servers
 - **Does NOT** read your message contents (only sender names for matching)
 
+📄 **[Full Privacy Policy](PRIVACY.md)**
+
 ## How It Works
 
 1. The content script monitors the page title for message count changes (which Facebook updates when you have unread messages)
@@ -123,12 +132,6 @@ This extension:
 3. If a conversation matches a VIP contact name, it sends a notification request to the background service worker
 4. The background worker displays a desktop notification
 5. Clicking the notification focuses the Messenger tab
-
-## Limitations
-
-- Facebook's HTML structure changes frequently; the extension may need updates if Facebook changes their page layout
-- The extension requires the Messenger tab to be open (not necessarily active/focused)
-- Some features may not work if Facebook is using a different language setting
 
 ## Support
 

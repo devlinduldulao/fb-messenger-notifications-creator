@@ -92,9 +92,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+// Track total unread VIP messages for badge
+let unreadVipCount = 0;
+
+// Update the extension badge
+function updateBadge(count) {
+  unreadVipCount = count;
+  if (count > 0) {
+    chrome.action.setBadgeText({ text: count.toString() });
+    chrome.action.setBadgeBackgroundColor({ color: '#FF3B30' }); // Red badge
+  } else {
+    chrome.action.setBadgeText({ text: '' });
+  }
+}
+
 // Handle new message notification
 async function handleNewMessage(data) {
-  console.log('[VIP Background] handleNewMessage called with:', data);
+  console.log('[VIP Background] *** handleNewMessage ***', data);
   
   const { senderName, messagePreview, timestamp, messageCount } = data;
   
@@ -102,25 +116,29 @@ async function handleNewMessage(data) {
   const settings = await chrome.storage.sync.get(['silentMode']);
   
   if (settings.silentMode) {
-    console.log('[VIP Background] Silent mode enabled, skipping notification for:', senderName);
+    console.log('[VIP Background] Silent mode enabled, skipping');
     return;
   }
   
-  // Show notification immediately - deduplication is handled by content script
-  const notificationId = `vip-msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+  // Update badge count
+  updateBadge(unreadVipCount + (messageCount || 1));
   
-  console.log('[VIP Background] Creating notification:', notificationId);
+  // Create unique notification ID
+  const notificationId = `vip-msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  
+  console.log('[VIP Background] Creating notification ID:', notificationId);
   
   // Use chrome.runtime.getURL for proper icon path
   const iconUrl = chrome.runtime.getURL('icons/icon128.png');
   
-  // Build notification message - include message count if multiple
-  let title = `💬 Message from ${senderName}`;
-  let message = messagePreview || 'New message received';
-  
+  // Build title based on message count
+  let title, message;
   if (messageCount && messageCount > 1) {
-    title = `💬 ${messageCount} messages from ${senderName}`;
-    message = `Latest: ${messagePreview || 'New messages received'}`;
+    title = `💬 ${senderName} (${messageCount} new)`;
+    message = `Latest: ${messagePreview || 'New messages'}`;
+  } else {
+    title = `💬 ${senderName}`;
+    message = messagePreview || 'New message';
   }
   
   chrome.notifications.create(notificationId, {
@@ -132,11 +150,10 @@ async function handleNewMessage(data) {
     silent: false
   }, (createdId) => {
     if (chrome.runtime.lastError) {
-      console.error('[VIP Background] Notification error:', chrome.runtime.lastError);
-      // Try with a data URL as fallback
+      console.error('[VIP Background] Notification FAILED:', chrome.runtime.lastError);
       tryFallbackNotification(notificationId, senderName, messagePreview);
     } else {
-      console.log('[VIP Background] Notification created successfully:', createdId);
+      console.log('[VIP Background] ✓ Notification CREATED:', createdId);
     }
   });
 }
@@ -163,7 +180,10 @@ function tryFallbackNotification(notificationId, senderName, messagePreview) {
 
 // Handle notification click - focus on Facebook Messenger tab
 chrome.notifications.onClicked.addListener((notificationId) => {
-  if (notificationId.startsWith('vip-msg-')) {
+  if (notificationId.startsWith('vip-msg-') || notificationId.startsWith('test-')) {
+    // Clear the badge when user clicks notification
+    updateBadge(0);
+    
     // Find and focus the Messenger tab
     chrome.tabs.query({ url: ['https://www.facebook.com/messages/*', 'https://www.messenger.com/*'] }, (tabs) => {
       if (tabs.length > 0) {
@@ -175,6 +195,14 @@ chrome.notifications.onClicked.addListener((notificationId) => {
       }
     });
     chrome.notifications.clear(notificationId);
+  }
+});
+
+// Clear badge when user views the messenger tab
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const tab = await chrome.tabs.get(activeInfo.tabId);
+  if (tab.url && (tab.url.includes('facebook.com/messages') || tab.url.includes('messenger.com'))) {
+    updateBadge(0);
   }
 });
 

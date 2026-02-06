@@ -8,8 +8,8 @@
   let vipContacts = [];
   let silentMode = false;
   let lastTitleCount = 0;
-  let lastNotifiedCount = 0; // Track what count we last notified about
-  let processedTimestamps = new Set();
+  let lastNotifiedCount = 0;
+  let lastNotifiedTime = 0; // Prevent rapid notifications
   let isMonitoring = false;
   
   // Load settings from storage
@@ -322,27 +322,26 @@
       return;
     }
     
+    // Only use title-based detection - most reliable
     const currentCount = getMessageCountFromTitle();
-    const countDifference = currentCount - lastNotifiedCount;
     
-    // Only log when something changes
-    if (currentCount !== lastTitleCount) {
-      console.log('[VIP Debug] Title count changed:', lastTitleCount, '->', currentCount, '(unnotified new:', countDifference, ')');
+    // Prevent rapid notifications (minimum 5 seconds between notifications)
+    const now = Date.now();
+    if (now - lastNotifiedTime < 5000) {
+      return;
     }
     
-    // If count increased from what we last notified about
-    if (countDifference > 0) {
-      console.log('[VIP Debug] Detected', countDifference, 'new message(s)');
+    // Only notify if count increased
+    if (currentCount > lastNotifiedCount) {
+      const newMessages = currentCount - lastNotifiedCount;
+      console.log('[VIP] New messages detected:', newMessages, '(title count:', currentCount, ')');
       
-      // Try to find which conversation has unread messages
+      // Find VIP sender
       let vipSenderFound = null;
       let messagePreview = 'New message';
       
-      // Strategy 1: Look for unread conversation elements
-      const unreadElements = findUnreadMessages();
-      console.log('[VIP Debug] Found', unreadElements.length, 'unread elements');
-      
-      for (const element of unreadElements) {
+      const conversations = findAllConversations();
+      for (const element of conversations) {
         const senderName = extractSenderName(element);
         if (senderName && isVipContact(senderName)) {
           vipSenderFound = senderName;
@@ -351,79 +350,47 @@
         }
       }
       
-      // Strategy 2: If no unread found, scan ALL conversations for VIP matches
-      if (!vipSenderFound) {
-        console.log('[VIP Debug] No unread VIP found, scanning all conversations...');
-        const allConversations = findAllConversations();
+      if (vipSenderFound) {
+        console.log('[VIP] *** Notifying for:', vipSenderFound, '***');
         
-        for (const element of allConversations) {
-          const senderName = extractSenderName(element);
-          if (senderName && isVipContact(senderName)) {
-            vipSenderFound = senderName;
-            messagePreview = extractMessagePreview(element);
-            console.log('[VIP Debug] Found VIP in conversation list:', senderName);
-            break;
+        chrome.runtime.sendMessage({
+          type: 'NEW_VIP_MESSAGE',
+          data: {
+            senderName: vipSenderFound,
+            messagePreview: messagePreview,
+            timestamp: now,
+            messageCount: newMessages
           }
-        }
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error('[VIP] Error:', chrome.runtime.lastError);
+          }
+        });
+        
+        lastNotifiedTime = now;
       }
       
-      // If we found a VIP contact, send notifications
-      if (vipSenderFound) {
-        console.log('[VIP] Sending', countDifference, 'notification(s) for:', vipSenderFound);
-        
-        const timestamp = Date.now();
-        
-        // Send a notification for EACH new message
-        for (let i = 0; i < countDifference; i++) {
-          const notifyTimestamp = timestamp + i;
-          
-          setTimeout(() => {
-            chrome.runtime.sendMessage({
-              type: 'NEW_VIP_MESSAGE',
-              data: {
-                senderName: vipSenderFound,
-                messagePreview: i === 0 ? messagePreview : `New message (${i + 1} of ${countDifference})`,
-                timestamp: notifyTimestamp,
-                messageCount: 1
-              }
-            }, (response) => {
-              if (chrome.runtime.lastError) {
-                console.error('[VIP] Error sending message:', chrome.runtime.lastError);
-              } else {
-                console.log('[VIP] Notification', i + 1, 'sent:', response);
-              }
-            });
-          }, i * 500);
-        }
-        
-        // Update the notified count AFTER sending
-        lastNotifiedCount = currentCount;
-      } else {
-        console.log('[VIP Debug] No VIP contact found in conversations, updating counter anyway');
-        // Still update counter to prevent infinite retries for non-VIP messages
-        lastNotifiedCount = currentCount;
-      }
+      // Always update counter to prevent re-triggering
+      lastNotifiedCount = currentCount;
     }
     
-    // Reset counter when user reads messages (count goes to 0 or decreases)
+    // Reset when user reads messages
     if (currentCount < lastNotifiedCount) {
-      console.log('[VIP Debug] Messages read, resetting counter');
       lastNotifiedCount = currentCount;
     }
     
     lastTitleCount = currentCount;
   }
   
-  // Find ALL conversation elements (not just unread)
+  // Find ALL conversation elements
   function findAllConversations() {
     const conversations = [];
     
     const selectors = [
       'a[href*="/t/"]',
-      'a[href*="messages/t"]',
+      'a[href*="messages/t"]', 
       '[role="row"]',
-      '[role="listitem"]',
-      '[role="gridcell"]'
+      '[role="listitem"]'
     ];
     
     for (const selector of selectors) {
@@ -431,24 +398,22 @@
         const elements = document.querySelectorAll(selector);
         if (elements.length > 0) {
           elements.forEach(el => conversations.push(el));
-          break; // Use first selector that finds elements
+          break;
         }
       } catch (e) {
-        // Continue to next selector
+        // Continue
       }
     }
     
     return conversations;
   }
   
-  // Alternative: Monitor DOM mutations for new messages
+  // Monitor title changes only
   function setupMutationObserver() {
-    // Observe title changes
-    const titleObserver = new MutationObserver((mutations) => {
+    const titleObserver = new MutationObserver(() => {
       checkForVipMessages();
     });
     
-    // Observe the title element
     const titleElement = document.querySelector('title');
     if (titleElement) {
       titleObserver.observe(titleElement, { 
@@ -456,37 +421,7 @@
         characterData: true, 
         subtree: true 
       });
-    }
-    
-    // Also observe the main content area for new message elements
-    const chatListObserver = new MutationObserver((mutations) => {
-      // Debounce to avoid excessive checks
-      clearTimeout(window.vipCheckTimeout);
-      window.vipCheckTimeout = setTimeout(() => {
-        checkForVipMessages();
-      }, 500);
-    });
-    
-    // Find the chat list container (try multiple selectors)
-    const chatListSelectors = [
-      '[role="navigation"]',
-      '[data-testid="mwthreadlist"]',
-      '[aria-label*="Chats"]',
-      '[aria-label*="conversations"]',
-      'div[class*="x78zum5"]'
-    ];
-    
-    for (const selector of chatListSelectors) {
-      const container = document.querySelector(selector);
-      if (container) {
-        chatListObserver.observe(container, {
-          childList: true,
-          subtree: true,
-          characterData: true
-        });
-        console.log('Observing chat list with selector:', selector);
-        break;
-      }
+      console.log('[VIP] Title observer set up');
     }
   }
   
@@ -495,135 +430,107 @@
     if (isMonitoring) return;
     isMonitoring = true;
     
-    // Check every 1.5 seconds to catch new messages quickly
+    // Check every 3 seconds (reduced frequency)
     setInterval(() => {
       if (!silentMode) {
         checkForVipMessages();
       }
-    }, 1500);
+    }, 3000);
+    
+    console.log('[VIP] Polling started (every 3s)');
   }
   
   // Initialize when page is ready
   function init() {
     console.log('[VIP] Messenger VIP Notifications: Initializing...');
+    console.log('[VIP] Page URL:', window.location.href);
     
     loadSettings();
     
-    // Keep reloading settings periodically in case they change
+    // Keep reloading settings periodically
     setInterval(loadSettings, 30000);
     
     // Wait for page to fully load
     if (document.readyState === 'complete') {
-      setupMutationObserver();
-      startPolling();
+      startMonitoring();
     } else {
-      window.addEventListener('load', () => {
-        setupMutationObserver();
-        startPolling();
-      });
+      window.addEventListener('load', startMonitoring);
     }
+  }
+  
+  function startMonitoring() {
+    console.log('[VIP] Starting monitoring...');
     
-    // Initial check with delay
-    setTimeout(() => {
-      lastTitleCount = getMessageCountFromTitle();
-      lastNotifiedCount = lastTitleCount; // Start from current count
-      console.log('[VIP] Initial message count:', lastTitleCount);
-      checkForVipMessages();
-    }, 2000);
+    // Initialize counters
+    lastTitleCount = getMessageCountFromTitle();
+    lastNotifiedCount = lastTitleCount;
+    lastNotifiedTime = Date.now();
+    
+    console.log('[VIP] Initial title count:', lastTitleCount);
+    console.log('[VIP] VIP contacts:', vipContacts);
+    
+    setupMutationObserver();
+    startPolling();
   }
   
   // Start the extension
   init();
   
-  // Expose debug functions to window for testing in console
+  // Expose debug functions
   window.VIPDebug = {
-    // Show current state
     status: () => {
-      const currentCount = getMessageCountFromTitle();
+      const titleCount = getMessageCountFromTitle();
       console.log('[VIP Status]', {
-        currentTitleCount: currentCount,
-        lastTitleCount,
-        lastNotifiedCount,
         vipContacts,
         silentMode,
-        willNotify: currentCount > lastNotifiedCount
+        titleCount,
+        lastNotifiedCount,
+        willNotify: titleCount > lastNotifiedCount
       });
-      return { currentCount, lastTitleCount, lastNotifiedCount, vipContacts, silentMode };
+      return { vipContacts, titleCount, lastNotifiedCount };
     },
-    // Reset counters (use if stuck)
     reset: () => {
       lastTitleCount = 0;
       lastNotifiedCount = 0;
-      processedTimestamps.clear();
-      console.log('[VIP Debug] Counters reset to 0');
+      lastNotifiedTime = 0;
+      console.log('[VIP] Counters reset');
     },
-    // Manually trigger a check
     check: () => {
-      console.log('[VIP Debug] Manual check triggered');
+      lastNotifiedTime = 0; // Allow immediate notification
       checkForVipMessages();
     },
-    // Show current VIP contacts
-    contacts: () => {
-      console.log('[VIP Debug] VIP Contacts:', vipContacts);
-      return vipContacts;
-    },
-    // Test notification with a name
     testNotification: (name) => {
-      console.log('[VIP Debug] Testing notification for:', name);
       chrome.runtime.sendMessage({
         type: 'NEW_VIP_MESSAGE',
         data: {
-          senderName: name || 'Test Contact',
-          messagePreview: 'This is a test notification',
+          senderName: name || 'Test',
+          messagePreview: 'Test ' + new Date().toLocaleTimeString(),
           timestamp: Date.now(),
           messageCount: 1
         }
-      }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.error('[VIP Debug] Error:', chrome.runtime.lastError);
-        } else {
-          console.log('[VIP Debug] Test notification response:', response);
-        }
-      });
+      }, (r) => console.log('[VIP] Test sent:', r));
     },
-    // Manually add a contact for testing
+    contacts: () => vipContacts,
     addContact: (name) => {
       if (!vipContacts.includes(name)) {
         vipContacts.push(name);
         chrome.storage.sync.set({ vipContacts });
-        console.log('[VIP Debug] Added contact:', name);
       }
       return vipContacts;
     },
-    // Check if a name matches
-    matchTest: (name) => {
-      const result = isVipContact(name);
-      console.log('[VIP Debug] Match test for "' + name + '":', result);
-      return result;
-    },
-    // Force reload settings
-    reload: () => {
-      loadSettings();
-      console.log('[VIP Debug] Settings reloaded');
-    },
-    // Get all conversation names on page
+    matchTest: (name) => isVipContact(name),
+    reload: loadSettings,
     scanPage: () => {
-      console.log('[VIP Debug] Scanning page for all conversations...');
-      const conversations = findAllConversations();
       const names = [];
-      
-      conversations.forEach(el => {
+      findAllConversations().forEach(el => {
         const name = extractSenderName(el);
-        if (name && name.length > 1 && name.length < 50 && !names.includes(name)) {
-          names.push(name);
-        }
+        if (name && !names.includes(name)) names.push(name);
       });
-      
-      console.log('[VIP Debug] Found', names.length, 'conversation names:', names);
+      console.log('[VIP] Conversations:', names);
       return names;
     }
   };
   
-  console.log('[VIP] Debug: Type VIPDebug.status() to see current state, VIPDebug.reset() to fix stuck counters');
+  console.log('[VIP] Ready! Commands: VIPDebug.status(), .testNotification("name"), .reset()');
   
 })();
