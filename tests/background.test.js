@@ -242,7 +242,7 @@ describe('Background Service Worker', () => {
       expect(chrome.notifications.clear).toHaveBeenCalledWith('test-notification-id');
     });
 
-    test('should open new messenger tab if none exists', () => {
+    test('should open a Facebook Messages tab if none exists', () => {
       loadBackgroundScript();
       
       const clickCallback = chrome.notifications.onClicked.addListener.mock.calls[0][0];
@@ -253,7 +253,7 @@ describe('Background Service Worker', () => {
       
       clickCallback('test-notification-id');
       
-      expect(chrome.tabs.create).toHaveBeenCalledWith({ url: 'https://www.messenger.com/' });
+      expect(chrome.tabs.create).toHaveBeenCalledWith({ url: 'https://www.facebook.com/messages/' });
     });
   });
 });

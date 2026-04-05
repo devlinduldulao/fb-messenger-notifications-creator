@@ -134,7 +134,7 @@ chrome.notifications.onClicked.addListener((notificationId) => {
       chrome.tabs.update(tabs[0].id, { active: true });
       chrome.windows.update(tabs[0].windowId, { focused: true });
     } else {
-      chrome.tabs.create({ url: 'https://www.messenger.com/' });
+      chrome.tabs.create({ url: 'https://www.facebook.com/messages/' });
     }
   });
   chrome.notifications.clear(notificationId);

@@ -35,7 +35,7 @@ All data is stored **locally in your browser** using Chrome`s storage API:
 | `storage` | Save your silent mode preference |
 | `activeTab` | Access the current tab to check for Messenger pages |
 | `tabs` | Detect when you switch to Messenger tab (to clear badge) |
-| `host_permissions` (facebook.com, messenger.com) | Monitor Messenger pages for new messages |
+| `host_permissions` (facebook.com, messenger.com) | Monitor Facebook Messages and keep messenger.com compatibility during migration |
 
 ## How The Extension Works
 
