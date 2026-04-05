@@ -39,7 +39,7 @@
       color: #666;
     }
     button {
-      background: #0084ff;
+      background: #f50057;
       color: white;
       border: none;
       padding: 12px 24px;
@@ -48,7 +48,7 @@
       cursor: pointer;
       margin: 10px;
     }
-    button:hover { background: #0066cc; }
+    button:hover { background: #c51162; }
     .instructions {
       background: white;
       padding: 20px;
@@ -106,75 +106,24 @@
       const canvas = document.getElementById('icon' + size);
       const ctx = canvas.getContext('2d');
       
-      // Background circle - Facebook blue gradient
+      // Background circle - Pink gradient
       const gradient = ctx.createLinearGradient(0, 0, size, size);
-      gradient.addColorStop(0, '#0084ff');
-      gradient.addColorStop(1, '#0066cc');
+      gradient.addColorStop(0, '#ff73a8');
+      gradient.addColorStop(1, '#f50057');
       
       ctx.fillStyle = gradient;
       ctx.beginPath();
       ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
       ctx.fill();
       
-      // Message bubble
+      // Messenger logo (white, with lightning bolt cutout via evenodd)
+      const scale = size / 24;
+      ctx.save();
+      ctx.scale(scale, scale);
       ctx.fillStyle = 'white';
-      const bubbleWidth = size * 0.55;
-      const bubbleHeight = size * 0.4;
-      const bubbleX = (size - bubbleWidth) / 2;
-      const bubbleY = size * 0.22;
-      const radius = size * 0.08;
-      
-      // Rounded rectangle for bubble
-      ctx.beginPath();
-      ctx.moveTo(bubbleX + radius, bubbleY);
-      ctx.lineTo(bubbleX + bubbleWidth - radius, bubbleY);
-      ctx.quadraticCurveTo(bubbleX + bubbleWidth, bubbleY, bubbleX + bubbleWidth, bubbleY + radius);
-      ctx.lineTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight - radius);
-      ctx.quadraticCurveTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight, bubbleX + bubbleWidth - radius, bubbleY + bubbleHeight);
-      ctx.lineTo(bubbleX + radius, bubbleY + bubbleHeight);
-      ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleHeight, bubbleX, bubbleY + bubbleHeight - radius);
-      ctx.lineTo(bubbleX, bubbleY + radius);
-      ctx.quadraticCurveTo(bubbleX, bubbleY, bubbleX + radius, bubbleY);
-      ctx.fill();
-      
-      // Bubble tail
-      ctx.beginPath();
-      ctx.moveTo(size * 0.35, bubbleY + bubbleHeight);
-      ctx.lineTo(size * 0.25, size * 0.72);
-      ctx.lineTo(size * 0.45, bubbleY + bubbleHeight);
-      ctx.fill();
-      
-      // Notification star badge
-      const starCenterX = size * 0.72;
-      const starCenterY = size * 0.72;
-      const starRadius = size * 0.18;
-      
-      // Red circle background for star
-      ctx.fillStyle = '#ff3b30';
-      ctx.beginPath();
-      ctx.arc(starCenterX, starCenterY, starRadius, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Draw star
-      ctx.fillStyle = 'white';
-      ctx.beginPath();
-      const spikes = 5;
-      const outerRadius = starRadius * 0.6;
-      const innerRadius = starRadius * 0.3;
-      
-      for (let i = 0; i < spikes * 2; i++) {
-        const radius = i % 2 === 0 ? outerRadius : innerRadius;
-        const angle = (Math.PI / 2) + (i * Math.PI / spikes);
-        const x = starCenterX + Math.cos(angle) * radius;
-        const y = starCenterY - Math.sin(angle) * radius;
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      ctx.closePath();
-      ctx.fill();
+      const path = new Path2D("M12 2C6.477 2 2 6.145 2 11.264c0 2.924 1.488 5.613 3.992 7.356.166.115.285.29.324.489l.391 2.016c.074.379.49.567.818.37l2.258-1.353a1.056 1.056 0 0 1 1.052-.037C11.196 20.378 11.597 20.5 12 20.5c5.522 0 10-4.145 10-9.264S17.522 2 12 2zm1.096 12.336-2.583-2.76-5.068 2.76 5.56-5.897 2.583 2.76 5.068-2.76-5.56 5.897z");
+      ctx.fill(path, 'evenodd');
+      ctx.restore();
     }
     
     // Download icon

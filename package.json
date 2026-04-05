@@ -1,6 +1,6 @@
 {
   "name": "messenger-notifications",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Get desktop notifications when you receive new Facebook Messenger messages",
   "scripts": {
     "test": "jest",

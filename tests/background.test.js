@@ -87,7 +87,7 @@ describe('Background Service Worker', () => {
   });
 
   describe('Notifications', () => {
-    test('should create notification with correct icon path (.jpeg)', async () => {
+    test('should create notification with correct icon path (.png)', async () => {
       // Reset mocks to isolate this test
       jest.clearAllMocks();
       
@@ -105,8 +105,8 @@ describe('Background Service Worker', () => {
       const createCall = chrome.notifications.create.mock.calls[0];
       const options = createCall[1];
       
-      expect(options.iconUrl).toContain('icon128.jpeg');
-      expect(options.iconUrl).not.toContain('.png');
+      expect(options.iconUrl).toContain('icon128.png');
+      expect(options.iconUrl).not.toContain('.jpeg');
     });
 
     test('should use correct notification options', async () => {

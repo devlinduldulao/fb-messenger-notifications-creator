@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Messenger Notifications",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Get desktop notifications when you receive new Facebook Messenger messages",
   "permissions": [
     "notifications",
@@ -25,15 +25,15 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icons/icon16.jpeg",
-      "48": "icons/icon48.jpeg",
-      "128": "icons/icon128.jpeg"
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     },
     "default_title": "Messenger Notifications"
   },
   "icons": {
-    "16": "icons/icon16.jpeg",
-    "48": "icons/icon48.jpeg",
-    "128": "icons/icon128.jpeg"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 }
