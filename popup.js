@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const silentModeLabel = document.getElementById('silentModeLabel');
   const statusMessage = document.getElementById('statusMessage');
   const testNotificationBtn = document.getElementById('testNotificationBtn');
+  let statusTimeout;
   
   // Initialize
   loadSettings();
@@ -12,16 +13,21 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load settings from storage
   function loadSettings() {
     chrome.storage.sync.get(['silentMode'], (result) => {
-      silentModeToggle.checked = result.silentMode || false;
+      if (chrome.runtime.lastError) {
+        showStatus('Could not load settings', true);
+        return;
+      }
+      silentModeToggle.checked = result.silentMode === true;
       updateSilentModeLabel();
     });
   }
   
   // Show status message
   function showStatus(message, isError = false) {
+    clearTimeout(statusTimeout);
     statusMessage.textContent = message;
     statusMessage.className = isError ? 'status error' : 'status';
-    setTimeout(() => {
+    statusTimeout = setTimeout(() => {
       statusMessage.textContent = '';
     }, 2000);
   }
@@ -39,6 +45,11 @@ document.addEventListener('DOMContentLoaded', () => {
   silentModeToggle.addEventListener('change', () => {
     updateSilentModeLabel();
     chrome.storage.sync.set({ silentMode: silentModeToggle.checked }, () => {
+      if (chrome.runtime.lastError) {
+        showStatus('Could not save settings', true);
+        loadSettings();
+        return;
+      }
       if (silentModeToggle.checked) {
         showStatus('Silent mode enabled');
       } else {
@@ -49,12 +60,18 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Test notification button
   testNotificationBtn.addEventListener('click', () => {
+    testNotificationBtn.disabled = true;
+    testNotificationBtn.setAttribute('aria-busy', 'true');
     chrome.runtime.sendMessage({ type: 'TEST_NOTIFICATION' }, (response) => {
+      testNotificationBtn.disabled = false;
+      testNotificationBtn.removeAttribute('aria-busy');
       if (chrome.runtime.lastError) {
-        showStatus('Error: ' + chrome.runtime.lastError.message, true);
+        showStatus(`Could not send test: ${chrome.runtime.lastError.message}`, true);
+      } else if (!response?.received) {
+        showStatus('Could not send test notification', true);
       } else {
-        showStatus('Test notification sent!');
+        showStatus('Test notification sent');
       }
     });
   });
-});
+}, { once: true });

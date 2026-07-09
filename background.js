@@ -1,158 +1,135 @@
-// Background service worker for Messenger Notifications
+// Service worker for Messenger Notifications.
 
-console.log('[Messenger Background] Service worker starting...');
+const MESSENGER_HOME_URL = 'https://www.facebook.com/messages/';
+const MESSENGER_TAB_PATTERNS = [
+  'https://www.facebook.com/messages/*',
+  'https://www.messenger.com/*'
+];
 
-// Keep service worker alive
-const keepAlive = () => {
-  chrome.runtime.getPlatformInfo(() => {});
-};
-setInterval(keepAlive, 20000);
-
-// Track unread messages for badge
-let unreadCount = 0;
-
-// Initialize default settings when extension is installed
-chrome.runtime.onInstalled.addListener(() => {
-  console.log('[Messenger Background] Extension installed/updated');
-  chrome.storage.sync.get(['silentMode'], (result) => {
-    if (result.silentMode === undefined) {
-      chrome.storage.sync.set({ silentMode: false });
-      console.log('[Messenger Background] Initialized default settings');
-    }
-  });
-  
-  // Show test notification on install
-  setTimeout(() => {
-    showTestNotification();
-  }, 2000);
-});
-
-// Show a test notification
-function showTestNotification() {
-  console.log('[Messenger Background] Showing test notification...');
-  
-  const notificationId = `test-notification-${Date.now()}`;
-  const iconUrl = chrome.runtime.getURL('icons/icon128.png');
-  
-  chrome.notifications.create(notificationId, {
-    type: 'basic',
-    iconUrl: iconUrl,
-    title: 'Messenger Notifications Active',
-    message: 'You will now receive notifications for new messages!',
-    priority: 2,
-    silent: false
-  }, (createdId) => {
-    if (chrome.runtime.lastError) {
-      console.error('[Messenger Background] Notification error:', chrome.runtime.lastError);
-    } else {
-      console.log('[Messenger Background] Test notification created:', createdId);
-    }
-  });
+function isMessengerUrl(url) {
+  try {
+    const { hostname, pathname } = new URL(url);
+    return (
+      (hostname === 'www.facebook.com' && (pathname === '/messages' || pathname.startsWith('/messages/'))) ||
+      hostname === 'www.messenger.com'
+    );
+  } catch {
+    return false;
+  }
 }
 
-// Update the extension badge
+function isValidUnreadCount(value) {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
 function updateBadge(count) {
-  unreadCount = count;
+  const text = count > 999 ? '999+' : count > 0 ? String(count) : '';
+  chrome.action.setBadgeText({ text });
+
   if (count > 0) {
-    chrome.action.setBadgeText({ text: count.toString() });
-    chrome.action.setBadgeBackgroundColor({ color: '#FF3B30' });
-  } else {
-    chrome.action.setBadgeText({ text: '' });
+    chrome.action.setBadgeBackgroundColor({ color: '#d93025' });
   }
 }
 
-// Listen for messages from content script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[Messenger Background] Received message:', message);
-  
-  if (message.type === 'NEW_MESSAGE') {
-    handleNewMessage(message.data);
-    sendResponse({ received: true, status: 'processing' });
-  } else if (message.type === 'TEST_NOTIFICATION') {
-    showTestNotification();
-    sendResponse({ received: true, status: 'test sent' });
-  }
-  return true;
-});
+function createNotification({ title, message, idPrefix }) {
+  const uniqueSuffix = globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
+  const notificationId = `${idPrefix}-${Date.now()}-${uniqueSuffix}`;
 
-// Handle new message notification
-async function handleNewMessage(data) {
-  console.log('[Messenger Background] handleNewMessage:', data);
-  
-  const { messageCount, totalUnread, timestamp } = data;
-  
-  // Check if silent mode is enabled
-  const settings = await chrome.storage.sync.get(['silentMode']);
-  
-  if (settings.silentMode) {
-    console.log('[Messenger Background] Silent mode enabled, skipping');
+  chrome.notifications.create(
+    notificationId,
+    {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+      title,
+      message,
+      priority: 2
+    },
+    () => {
+      if (chrome.runtime.lastError) {
+        console.error('Unable to create notification:', chrome.runtime.lastError.message);
+      }
+    }
+  );
+}
+
+function showTestNotification() {
+  createNotification({
+    idPrefix: 'test',
+    title: 'Messenger Notifications is ready',
+    message: 'You will be notified when new Messenger messages arrive.'
+  });
+}
+
+async function handleUnreadChange({ messageCount, totalUnread }) {
+  if (!isValidUnreadCount(messageCount) || !isValidUnreadCount(totalUnread)) {
     return;
   }
-  
-  // Update badge count
+
+  // Silent mode controls desktop alerts only; the badge remains useful feedback.
   updateBadge(totalUnread);
-  
-  // Create notification
-  const notificationId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  const iconUrl = chrome.runtime.getURL('icons/icon128.png');
-  
-  let title, message;
-  if (messageCount > 1) {
-    title = `${messageCount} new messages`;
-    message = `You have ${totalUnread} unread messages on Messenger`;
-  } else {
-    title = 'New message';
-    message = totalUnread > 1 
-      ? `You have ${totalUnread} unread messages on Messenger`
-      : 'You have a new message on Messenger';
+
+  if (messageCount === 0 || totalUnread === 0) {
+    return;
   }
-  
-  chrome.notifications.create(notificationId, {
-    type: 'basic',
-    iconUrl: iconUrl,
-    title: title,
-    message: message,
-    priority: 2,
-    silent: false
-  }, (createdId) => {
-    if (chrome.runtime.lastError) {
-      console.error('[Messenger Background] Notification FAILED:', chrome.runtime.lastError);
-    } else {
-      console.log('[Messenger Background] Notification CREATED:', createdId);
-    }
-  });
+
+  const { silentMode = false } = await chrome.storage.sync.get(['silentMode']);
+  if (silentMode) {
+    return;
+  }
+
+  const title = messageCount === 1 ? 'New Messenger message' : `${messageCount} new Messenger messages`;
+  const message = totalUnread === 1
+    ? 'You have 1 unread message.'
+    : `You have ${totalUnread} unread messages.`;
+
+  createNotification({ idPrefix: 'message', title, message });
 }
 
-// Handle notification click - focus on Messenger tab
+chrome.runtime.onInstalled.addListener(async () => {
+  const { silentMode } = await chrome.storage.sync.get(['silentMode']);
+  if (silentMode === undefined) {
+    await chrome.storage.sync.set({ silentMode: false });
+  }
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === 'UNREAD_COUNT_CHANGED') {
+    void handleUnreadChange(message.data).catch((error) => {
+      console.error('Unable to process unread count:', error);
+    });
+    sendResponse({ received: true });
+    return;
+  }
+
+  if (message?.type === 'TEST_NOTIFICATION') {
+    showTestNotification();
+    sendResponse({ received: true });
+  }
+});
+
 chrome.notifications.onClicked.addListener((notificationId) => {
-  // Clear the badge
   updateBadge(0);
-  
-  // Find and focus the Messenger tab
-  chrome.tabs.query({ url: ['https://www.facebook.com/messages/*', 'https://www.messenger.com/*'] }, (tabs) => {
-    if (tabs.length > 0) {
-      chrome.tabs.update(tabs[0].id, { active: true });
-      chrome.windows.update(tabs[0].windowId, { focused: true });
+
+  chrome.tabs.query({ url: MESSENGER_TAB_PATTERNS }, (tabs) => {
+    const [tab] = tabs;
+    if (tab?.id !== undefined && tab.windowId !== undefined) {
+      chrome.tabs.update(tab.id, { active: true });
+      chrome.windows.update(tab.windowId, { focused: true });
     } else {
-      chrome.tabs.create({ url: 'https://www.facebook.com/messages/' });
+      chrome.tabs.create({ url: MESSENGER_HOME_URL });
     }
   });
+
   chrome.notifications.clear(notificationId);
 });
 
-// Clear badge when user views the messenger tab
-chrome.tabs.onActivated.addListener(async (activeInfo) => {
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
-    const tab = await chrome.tabs.get(activeInfo.tabId);
-    if (tab.url && (tab.url.includes('facebook.com/messages') || tab.url.includes('messenger.com'))) {
+    const tab = await chrome.tabs.get(tabId);
+    if (isMessengerUrl(tab.url)) {
       updateBadge(0);
     }
-  } catch (e) {
-    // Tab might not exist
+  } catch {
+    // The tab may have been closed before Chrome resolves the request.
   }
-});
-
-// Clear notification when dismissed
-chrome.notifications.onClosed.addListener((notificationId, byUser) => {
-  console.log(`Notification ${notificationId} closed${byUser ? ' by user' : ''}`);
 });

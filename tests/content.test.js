@@ -1,229 +1,107 @@
-// Tests for content.js functionality
-
-describe('Content Script', () => {
-  let originalTitle;
-  
-  beforeEach(() => {
-    // Save original title
-    originalTitle = document.title;
-    // Reset document title
-    document.title = 'Messenger';
-    // Clear module cache
+describe('Content script', () => {
+  const loadContentScript = () => {
     jest.resetModules();
+    require('../content.js');
+  };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    document.title = 'Messenger';
   });
 
   afterEach(() => {
-    // Restore title
-    document.title = originalTitle;
-    // Clean up any global debug object
-    delete window.MessengerDebug;
+    jest.useRealTimers();
   });
 
-  // Helper to load the content script
-  function loadContentScript() {
-    require('../content.js');
-  }
+  test('loads the saved setting and reports the initial unread count without an alert', () => {
+    document.title = '(4) Messenger';
+    loadContentScript();
 
-  describe('Initialization', () => {
-    test('should load settings on init', () => {
-      loadContentScript();
-      expect(chrome.storage.sync.get).toHaveBeenCalledWith(
-        ['silentMode'],
-        expect.any(Function)
-      );
-    });
-
-    test('should register storage change listener', () => {
-      loadContentScript();
-      expect(chrome.storage.onChanged.addListener).toHaveBeenCalled();
-    });
-
-    test('should expose debug interface', () => {
-      loadContentScript();
-      expect(window.MessengerDebug).toBeDefined();
-      expect(typeof window.MessengerDebug.status).toBe('function');
-      expect(typeof window.MessengerDebug.reset).toBe('function');
-    });
+    expect(chrome.storage.sync.get).toHaveBeenCalledWith(['silentMode'], expect.any(Function));
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'UNREAD_COUNT_CHANGED',
+        data: { messageCount: 0, totalUnread: 4 }
+      }),
+      expect.any(Function)
+    );
   });
 
-  describe('Message Count Detection', () => {
-    test('should extract count from title with format "(N)"', () => {
-      document.title = '(5) Messenger';
-      loadContentScript();
-      
-      const status = {};
-      const originalLog = console.log;
-      console.log = (msg, data) => {
-        if (msg === '[Messenger Status]') {
-          Object.assign(status, data);
-        }
-      };
-      
-      window.MessengerDebug.status();
-      
-      console.log = originalLog;
-      expect(status.currentCount).toBe(5);
-    });
+  test('reports a title-count increase as new messages', () => {
+    loadContentScript();
+    chrome.runtime.sendMessage.mockClear();
 
-    test('should return 0 when no count in title', () => {
-      document.title = 'Messenger';
-      loadContentScript();
-      
-      const status = {};
-      const originalLog = console.log;
-      console.log = (msg, data) => {
-        if (msg === '[Messenger Status]') {
-          Object.assign(status, data);
-        }
-      };
-      
-      window.MessengerDebug.status();
-      
-      console.log = originalLog;
-      expect(status.currentCount).toBe(0);
-    });
+    document.title = '(3) Messenger';
+    jest.advanceTimersByTime(10_000);
 
-    test('should handle double digit counts', () => {
-      document.title = '(42) Messenger';
-      loadContentScript();
-      
-      const status = {};
-      const originalLog = console.log;
-      console.log = (msg, data) => {
-        if (msg === '[Messenger Status]') {
-          Object.assign(status, data);
-        }
-      };
-      
-      window.MessengerDebug.status();
-      
-      console.log = originalLog;
-      expect(status.currentCount).toBe(42);
-    });
-
-    test('should handle triple digit counts', () => {
-      document.title = '(999) Messenger';
-      loadContentScript();
-      
-      const status = {};
-      const originalLog = console.log;
-      console.log = (msg, data) => {
-        if (msg === '[Messenger Status]') {
-          Object.assign(status, data);
-        }
-      };
-      
-      window.MessengerDebug.status();
-      
-      console.log = originalLog;
-      expect(status.currentCount).toBe(999);
-    });
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { messageCount: 3, totalUnread: 3 }
+      }),
+      expect.any(Function)
+    );
   });
 
-  describe('New Message Detection', () => {
-    test('should have sendMessage available for notifications', async () => {
-      document.title = 'Messenger';
-      loadContentScript();
-      
-      // Wait for initialization
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Verify chrome.runtime.sendMessage is available
-      expect(chrome.runtime.sendMessage).toBeDefined();
-    });
+  test('does not queue a desktop alert while silent mode is enabled', () => {
+    chrome.storage.sync.get.mockImplementation((_keys, callback) => callback({ silentMode: true }));
+    loadContentScript();
+    chrome.runtime.sendMessage.mockClear();
 
-    test('should track unread count from title', async () => {
-      document.title = '(5) Messenger';
-      loadContentScript();
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      const status = {};
-      const originalLog = console.log;
-      console.log = (msg, data) => {
-        if (msg === '[Messenger Status]') {
-          Object.assign(status, data);
-        }
-      };
-      
-      window.MessengerDebug.status();
-      
-      console.log = originalLog;
-      // Should have detected 5 as initial count
-      expect(status.currentCount).toBe(5);
-      expect(status.lastNotifiedCount).toBe(5);
-    });
+    document.title = '(2) Messenger';
+    jest.advanceTimersByTime(10_000);
+
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { messageCount: 0, totalUnread: 2 }
+      }),
+      expect.any(Function)
+    );
   });
 
-  describe('Silent Mode', () => {
-    test('should load silent mode setting on init', async () => {
-      chrome.storage.sync.get.mockImplementation((keys, callback) => {
-        if (callback) {
-          callback({ silentMode: true });
-          return undefined;
-        }
-        return Promise.resolve({ silentMode: true });
-      });
-      
-      document.title = 'Messenger';
-      loadContentScript();
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Verify settings were loaded
-      expect(chrome.storage.sync.get).toHaveBeenCalledWith(
-        ['silentMode'],
-        expect.any(Function)
-      );
-    });
+  test('reports a lower count so the badge can be cleared or reduced', () => {
+    document.title = '(5) Messenger';
+    loadContentScript();
+    chrome.runtime.sendMessage.mockClear();
 
-    test('should update silent mode when storage changes', () => {
-      loadContentScript();
-      
-      const storageChangeCallback = chrome.storage.onChanged.addListener.mock.calls[0][0];
-      
-      // Simulate storage change
-      storageChangeCallback(
-        { silentMode: { newValue: true } },
-        'sync'
-      );
-      
-      // Verify the change was processed (we can check via debug)
-      const status = {};
-      const originalLog = console.log;
-      console.log = (msg, data) => {
-        if (msg === '[Messenger Status]') {
-          Object.assign(status, data);
-        }
-      };
-      
-      window.MessengerDebug.status();
-      
-      console.log = originalLog;
-      expect(status.silentMode).toBe(true);
-    });
+    document.title = '(1) Messenger';
+    jest.advanceTimersByTime(10_000);
+
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { messageCount: 0, totalUnread: 1 }
+      }),
+      expect.any(Function)
+    );
   });
 
-  describe('Debug Interface', () => {
-    test('should reset counters via debug interface', () => {
-      document.title = '(10) Messenger';
-      loadContentScript();
-      
-      // Reset counters
-      window.MessengerDebug.reset();
-      
-      const status = {};
-      const originalLog = console.log;
-      console.log = (msg, data) => {
-        if (msg === '[Messenger Status]') {
-          Object.assign(status, data);
-        }
-      };
-      
-      window.MessengerDebug.status();
-      
-      console.log = originalLog;
-      expect(status.lastNotifiedCount).toBe(0);
-    });
+  test('keeps the badge accurate when an unread count rises and then falls', () => {
+    document.title = '(3) Messenger';
+    loadContentScript();
+    chrome.runtime.sendMessage.mockClear();
+
+    document.title = '(4) Messenger';
+    jest.advanceTimersByTime(10_000);
+    document.title = '(3) Messenger';
+    jest.advanceTimersByTime(10_000);
+
+    expect(chrome.runtime.sendMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: { messageCount: 0, totalUnread: 3 } }),
+      expect.any(Function)
+    );
+  });
+
+  test('updates its silent-mode state when storage changes', () => {
+    loadContentScript();
+    const onChanged = chrome.storage.onChanged.addListener.mock.calls[0][0];
+    onChanged({ silentMode: { newValue: true } }, 'sync');
+    chrome.runtime.sendMessage.mockClear();
+
+    document.title = '(1) Messenger';
+    jest.advanceTimersByTime(10_000);
+
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { messageCount: 0, totalUnread: 1 } }),
+      expect.any(Function)
+    );
   });
 });

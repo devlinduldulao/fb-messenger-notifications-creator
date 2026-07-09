@@ -1,6 +1,6 @@
 # Privacy Policy for Messenger Notifications
 
-**Last Updated:** February 6, 2026
+**Last Updated:** July 9, 2026
 
 ## Overview
 
@@ -21,11 +21,7 @@ Messenger Notifications is a browser extension that sends you desktop notificati
 
 ## Data Storage
 
-All data is stored **locally in your browser** using Chrome`s storage API:
-- Data syncs across your signed-in browsers (same Google/Microsoft account)
-- Data never leaves your browser
-- No data is sent to external servers
-- No third-party services are used
+The silent mode preference is stored using the browser's synced extension storage. If you enable browser sync, the browser provider may synchronize that preference across your signed-in browsers. The extension itself does not transmit data to any server, and it does not use third-party analytics or advertising services.
 
 ## Permissions Used
 
@@ -33,9 +29,8 @@ All data is stored **locally in your browser** using Chrome`s storage API:
 |-----------|-----------------|
 | `notifications` | Display desktop notifications for new messages |
 | `storage` | Save your silent mode preference |
-| `activeTab` | Access the current tab to check for Messenger pages |
 | `tabs` | Detect when you switch to Messenger tab (to clear badge) |
-| `host_permissions` (facebook.com, messenger.com) | Monitor Facebook Messages and keep messenger.com compatibility during migration |
+| Messenger site access | Run the content script on `facebook.com/messages` and `messenger.com` to monitor the unread count in the page title |
 
 ## How The Extension Works
 

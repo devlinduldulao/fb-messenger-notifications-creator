@@ -1,171 +1,91 @@
-// Content script for monitoring Facebook Messenger messages
+// Content script for monitoring the unread count exposed in the Messenger page title.
 
-(function() {
+(() => {
   'use strict';
-  
-  console.log('Messenger Notifications: Content script loaded');
-  
+
+  const POLL_INTERVAL_MS = 10_000;
+  const NOTIFICATION_COOLDOWN_MS = 5_000;
+
   let silentMode = false;
-  let lastTitleCount = 0;
   let lastNotifiedCount = 0;
-  let lastNotifiedTime = 0;
-  let isMonitoring = false;
-  
-  // Load settings from storage
-  function loadSettings() {
-    chrome.storage.sync.get(['silentMode'], (result) => {
-      if (chrome.runtime.lastError) {
-        console.error('[Messenger] Error loading settings:', chrome.runtime.lastError);
-        return;
-      }
-      silentMode = result.silentMode || false;
-      console.log('[Messenger] Silent mode:', silentMode);
-    });
+  let lastReportedCount = 0;
+  let lastNotificationTime = 0;
+
+  function getUnreadCount() {
+    const match = document.title.match(/^\((\d+)\)/);
+    const count = match ? Number.parseInt(match[1], 10) : 0;
+    return Number.isSafeInteger(count) ? count : 0;
   }
-  
-  // Listen for settings updates
-  chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'sync') {
-      if (changes.silentMode !== undefined) {
-        silentMode = changes.silentMode.newValue;
-        console.log('[Messenger] Silent mode updated:', silentMode);
-      }
-    }
-  });
-  
-  // Extract message count from page title
-  function getMessageCountFromTitle() {
-    const title = document.title;
-    const match = title.match(/^\((\d+)\)/);
-    return match ? parseInt(match[1], 10) : 0;
-  }
-  
-  // Main function to check for new messages
-  function checkForNewMessages() {
-    if (silentMode) {
-      return;
-    }
-    
-    const currentCount = getMessageCountFromTitle();
-    
-    // Prevent rapid notifications (minimum 5 seconds between)
-    const now = Date.now();
-    if (now - lastNotifiedTime < 5000) {
-      return;
-    }
-    
-    // Only notify if count increased
-    if (currentCount > lastNotifiedCount) {
-      const newMessages = currentCount - lastNotifiedCount;
-      console.log('[Messenger] New messages detected:', newMessages, '(total unread:', currentCount, ')');
-      
-      chrome.runtime.sendMessage({
-        type: 'NEW_MESSAGE',
-        data: {
-          messageCount: newMessages,
-          totalUnread: currentCount,
-          timestamp: now
-        }
-      }, (response) => {
+
+  function sendUnreadChange(messageCount, totalUnread) {
+    chrome.runtime.sendMessage(
+      {
+        type: 'UNREAD_COUNT_CHANGED',
+        data: { messageCount, totalUnread }
+      },
+      () => {
         if (chrome.runtime.lastError) {
-          console.error('[Messenger] Error:', chrome.runtime.lastError);
+          console.warn('Messenger Notifications could not reach its service worker.');
         }
-      });
-      
-      lastNotifiedTime = now;
-      lastNotifiedCount = currentCount;
-    }
-    
-    // Reset when user reads messages
+      }
+    );
+  }
+
+  function checkForUnreadChanges() {
+    const currentCount = getUnreadCount();
+    const now = Date.now();
+
     if (currentCount < lastNotifiedCount) {
       lastNotifiedCount = currentCount;
+    } else if (currentCount > lastNotifiedCount && silentMode) {
+      lastNotifiedCount = currentCount;
+    } else if (currentCount > lastNotifiedCount && now - lastNotificationTime >= NOTIFICATION_COOLDOWN_MS) {
+      const messageCount = currentCount - lastNotifiedCount;
+      lastNotifiedCount = currentCount;
+      lastReportedCount = currentCount;
+      lastNotificationTime = now;
+      sendUnreadChange(messageCount, currentCount);
+      return;
     }
-    
-    lastTitleCount = currentCount;
-  }
-  
-  // Monitor title changes
-  function setupMutationObserver() {
-    const titleObserver = new MutationObserver(() => {
-      checkForNewMessages();
-    });
-    
-    const titleElement = document.querySelector('title');
-    if (titleElement) {
-      titleObserver.observe(titleElement, { 
-        childList: true, 
-        characterData: true, 
-        subtree: true 
-      });
-      console.log('[Messenger] Title observer set up');
+
+    if (currentCount !== lastReportedCount) {
+      // Keep the badge accurate even when this change does not produce an alert.
+      lastReportedCount = currentCount;
+      sendUnreadChange(0, currentCount);
     }
   }
-  
-  // Fallback: Poll for changes periodically
-  function startPolling() {
-    if (isMonitoring) return;
-    isMonitoring = true;
-    
-    setInterval(() => {
-      if (!silentMode) {
-        checkForNewMessages();
+
+  function loadSettings(onComplete) {
+    chrome.storage.sync.get(['silentMode'], (result) => {
+      if (chrome.runtime.lastError) {
+        console.warn('Messenger Notifications could not load its settings.');
+      } else {
+        silentMode = result.silentMode === true;
       }
-    }, 3000);
-    
-    console.log('[Messenger] Polling started (every 3s)');
+      onComplete();
+    });
   }
-  
-  // Initialize when page is ready
-  function init() {
-    console.log('[Messenger] Initializing...');
-    console.log('[Messenger] Page URL:', window.location.href);
-    
-    loadSettings();
-    
-    // Keep reloading settings periodically
-    setInterval(loadSettings, 30000);
-    
-    if (document.readyState === 'complete') {
-      startMonitoring();
-    } else {
-      window.addEventListener('load', startMonitoring);
-    }
-  }
-  
+
   function startMonitoring() {
-    console.log('[Messenger] Starting monitoring...');
-    
-    // Initialize counters
-    lastTitleCount = getMessageCountFromTitle();
-    lastNotifiedCount = lastTitleCount;
-    lastNotifiedTime = Date.now();
-    
-    console.log('[Messenger] Initial unread count:', lastTitleCount);
-    
-    setupMutationObserver();
-    startPolling();
+    lastNotifiedCount = getUnreadCount();
+    lastReportedCount = lastNotifiedCount;
+    sendUnreadChange(0, lastNotifiedCount);
+
+    const target = document.head || document.documentElement;
+    new MutationObserver(checkForUnreadChanges).observe(target, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+
+    window.setInterval(checkForUnreadChanges, POLL_INTERVAL_MS);
   }
-  
-  // Start the extension
-  init();
-  
-  // Debug helper
-  window.MessengerDebug = {
-    status: () => {
-      console.log('[Messenger Status]', {
-        silentMode,
-        currentCount: getMessageCountFromTitle(),
-        lastNotifiedCount
-      });
-    },
-    reset: () => {
-      lastTitleCount = 0;
-      lastNotifiedCount = 0;
-      lastNotifiedTime = 0;
-      console.log('[Messenger] Counters reset');
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'sync' && changes.silentMode) {
+      silentMode = changes.silentMode.newValue === true;
     }
-  };
-  
-  console.log('[Messenger] Ready! Debug: MessengerDebug.status()');
-  
+  });
+
+  loadSettings(startMonitoring);
 })();

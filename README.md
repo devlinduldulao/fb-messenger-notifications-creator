@@ -6,7 +6,7 @@ Get desktop notifications when you receive new Facebook Messenger messages. Neve
 
 - **Desktop Notifications**: Get instant visual notifications for new messages
 - **Badge Counter**: Red badge on the extension icon shows unread message count
-- **Silent Mode Toggle**: Easily turn off notifications when you need to focus
+- **Silent Mode Toggle**: Pause desktop alerts while keeping the unread badge visible
 - **Click to Open**: Click the notification to jump directly to Messenger
 - **Auto-Clear Badge**: Badge clears when you view the Messenger tab
 - **Primary Support**: Monitors `facebook.com/messages` and keeps `messenger.com` compatibility during the migration
@@ -32,9 +32,11 @@ Get desktop notifications when you receive new Facebook Messenger messages. Neve
 ## How to Use
 
 1. Keep a `facebook.com/messages` tab open (can be in background)
-2. When a new message arrives, you`ll get a desktop notification
+2. When a new message arrives, you'll get a desktop notification
 3. Click the notification to open Messenger
 4. Toggle Silent Mode in the popup when you need to focus
+
+The extension does not show a notification when it is installed. Use **Test notification** in the popup whenever you want to confirm that browser notifications are enabled.
 
 ## Troubleshooting
 
@@ -69,8 +71,8 @@ If icons are missing, run: `node create-icons.js`
 
 This extension:
 - **Primarily runs on** `facebook.com/messages/*` and keeps `messenger.com/*` compatibility during the migration
-- **Stores locally** your silent mode preference only
-- **Does NOT** send any data to external servers
+- **Stores only** your silent mode preference in your browser's synced extension storage
+- **Does NOT** send any data to servers operated by this extension
 - **Does NOT** read your message contents
 
 Full Privacy Policy: [PRIVACY.md](PRIVACY.md)

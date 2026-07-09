@@ -1,259 +1,137 @@
-// Tests for background.js functionality
-
-describe('Background Service Worker', () => {
-  // Helper to simulate loading background.js
-  function loadBackgroundScript() {
-    // Clear module cache
+describe('Background service worker', () => {
+  const loadBackgroundScript = () => {
     jest.resetModules();
-    // Load the script
     require('../background.js');
-  }
+  };
 
-  describe('Extension Installation', () => {
-    test('should register onInstalled listener', () => {
-      loadBackgroundScript();
-      expect(chrome.runtime.onInstalled.addListener).toHaveBeenCalled();
-    });
+  const flushAsyncWork = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-    test('should initialize silentMode to false on install', () => {
-      loadBackgroundScript();
-      
-      // Get the onInstalled callback
-      const installCallback = chrome.runtime.onInstalled.addListener.mock.calls[0][0];
-      
-      // Mock storage.get to return undefined for silentMode (support both callback and promise)
-      chrome.storage.sync.get.mockImplementation((keys, callback) => {
-        if (callback) {
-          callback({ silentMode: undefined });
-          return undefined;
-        }
-        return Promise.resolve({ silentMode: undefined });
-      });
-      
-      installCallback();
-      
-      expect(chrome.storage.sync.set).toHaveBeenCalledWith({ silentMode: false });
-    });
+  test('registers its event listeners', () => {
+    loadBackgroundScript();
+
+    expect(chrome.runtime.onInstalled.addListener).toHaveBeenCalledTimes(1);
+    expect(chrome.runtime.onMessage.addListener).toHaveBeenCalledTimes(1);
+    expect(chrome.notifications.onClicked.addListener).toHaveBeenCalledTimes(1);
+    expect(chrome.tabs.onActivated.addListener).toHaveBeenCalledTimes(1);
   });
 
-  describe('Message Handling', () => {
-    test('should register onMessage listener', () => {
-      loadBackgroundScript();
-      expect(chrome.runtime.onMessage.addListener).toHaveBeenCalled();
-    });
+  test('initializes silent mode only when no setting exists', async () => {
+    loadBackgroundScript();
+    const installed = chrome.runtime.onInstalled.addListener.mock.calls[0][0];
+    chrome.storage.sync.get.mockResolvedValue({ silentMode: undefined });
 
-    test('should handle NEW_MESSAGE type', () => {
-      loadBackgroundScript();
-      
-      const messageCallback = chrome.runtime.onMessage.addListener.mock.calls[0][0];
-      const sendResponse = jest.fn();
-      
-      const message = {
-        type: 'NEW_MESSAGE',
-        data: {
-          messageCount: 1,
-          totalUnread: 5,
-          timestamp: Date.now()
-        }
-      };
-      
-      messageCallback(message, {}, sendResponse);
-      
-      expect(sendResponse).toHaveBeenCalledWith({ 
-        received: true, 
-        status: 'processing' 
-      });
-      
-      // Clear any pending async operations from handleNewMessage
-      jest.clearAllMocks();
-    });
+    await installed();
 
-    test('should handle TEST_NOTIFICATION type', () => {
-      // Reset mocks to isolate this test
-      jest.clearAllMocks();
-      
-      loadBackgroundScript();
-      
-      const messageCallback = chrome.runtime.onMessage.addListener.mock.calls[0][0];
-      const sendResponse = jest.fn();
-      
-      messageCallback({ type: 'TEST_NOTIFICATION' }, {}, sendResponse);
-      
-      expect(sendResponse).toHaveBeenCalledWith({ 
-        received: true, 
-        status: 'test sent' 
-      });
-    });
+    expect(chrome.storage.sync.set).toHaveBeenCalledWith({ silentMode: false });
   });
 
-  describe('Notifications', () => {
-    test('should create notification with correct icon path (.png)', async () => {
-      // Reset mocks to isolate this test
-      jest.clearAllMocks();
-      
-      loadBackgroundScript();
-      
-      // Trigger test notification via message
-      const messageCallback = chrome.runtime.onMessage.addListener.mock.calls[0][0];
-      messageCallback({ type: 'TEST_NOTIFICATION' }, {}, jest.fn());
-      
-      // Wait for any async operations
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      expect(chrome.notifications.create).toHaveBeenCalled();
-      
-      const createCall = chrome.notifications.create.mock.calls[0];
-      const options = createCall[1];
-      
-      expect(options.iconUrl).toContain('icon128.png');
-      expect(options.iconUrl).not.toContain('.jpeg');
-    });
+  test('updates the badge and creates a notification for new messages', async () => {
+    loadBackgroundScript();
+    const onMessage = chrome.runtime.onMessage.addListener.mock.calls[0][0];
+    const respond = jest.fn();
 
-    test('should use correct notification options', async () => {
-      // Reset mocks to isolate this test
-      jest.clearAllMocks();
-      
-      loadBackgroundScript();
-      
-      const messageCallback = chrome.runtime.onMessage.addListener.mock.calls[0][0];
-      messageCallback({ type: 'TEST_NOTIFICATION' }, {}, jest.fn());
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      const createCall = chrome.notifications.create.mock.calls[0];
-      const options = createCall[1];
-      
-      expect(options.type).toBe('basic');
-      expect(options.priority).toBe(2);
-      expect(options.silent).toBe(false);
-      expect(options.title).toBeDefined();
-      expect(options.message).toBeDefined();
-    });
+    onMessage(
+      { type: 'UNREAD_COUNT_CHANGED', data: { messageCount: 2, totalUnread: 5 } },
+      {},
+      respond
+    );
+    await flushAsyncWork();
+
+    expect(respond).toHaveBeenCalledWith({ received: true });
+    expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ text: '5' });
+    expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith({ color: '#d93025' });
+    expect(chrome.notifications.create).toHaveBeenCalledWith(
+      expect.stringMatching(/^message-/),
+      expect.objectContaining({ title: '2 new Messenger messages', message: 'You have 5 unread messages.' }),
+      expect.any(Function)
+    );
   });
 
-  describe('Badge Updates', () => {
-    test('should set badge text when unread count > 0', async () => {
-      // Reset mocks to avoid interference from previous tests
-      jest.clearAllMocks();
-      
-      loadBackgroundScript();
-      
-      const messageCallback = chrome.runtime.onMessage.addListener.mock.calls[0][0];
-      
-      // Mock Promise-based storage.get
-      chrome.storage.sync.get.mockImplementation((keys, callback) => {
-        if (callback) {
-          callback({ silentMode: false });
-          return undefined;
-        }
-        return Promise.resolve({ silentMode: false });
-      });
-      
-      messageCallback({
-        type: 'NEW_MESSAGE',
-        data: { messageCount: 1, totalUnread: 3, timestamp: Date.now() }
-      }, {}, jest.fn());
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ text: '3' });
-      expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith({ color: '#FF3B30' });
-    });
+  test('keeps the badge current but suppresses alerts in silent mode', async () => {
+    loadBackgroundScript();
+    chrome.storage.sync.get.mockResolvedValue({ silentMode: true });
+    const onMessage = chrome.runtime.onMessage.addListener.mock.calls[0][0];
 
-    test('should clear badge when count is 0', async () => {
-      loadBackgroundScript();
-      
-      const messageCallback = chrome.runtime.onMessage.addListener.mock.calls[0][0];
-      
-      // Mock Promise-based storage.get
-      chrome.storage.sync.get.mockImplementation((keys, callback) => {
-        if (callback) {
-          callback({ silentMode: false });
-          return undefined;
-        }
-        return Promise.resolve({ silentMode: false });
-      });
-      
-      messageCallback({
-        type: 'NEW_MESSAGE',
-        data: { messageCount: 0, totalUnread: 0, timestamp: Date.now() }
-      }, {}, jest.fn());
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ text: '' });
-    });
+    onMessage({ type: 'UNREAD_COUNT_CHANGED', data: { messageCount: 1, totalUnread: 3 } }, {}, jest.fn());
+    await flushAsyncWork();
+
+    expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ text: '3' });
+    expect(chrome.notifications.create).not.toHaveBeenCalled();
   });
 
-  describe('Silent Mode', () => {
-    test('should skip notification when silent mode is enabled', async () => {
-      loadBackgroundScript();
-      
-      const messageCallback = chrome.runtime.onMessage.addListener.mock.calls[0][0];
-      
-      // Enable silent mode via Promise-based API
-      chrome.storage.sync.get.mockImplementation((keys, callback) => {
-        if (callback) {
-          callback({ silentMode: true });
-          return undefined;
-        }
-        return Promise.resolve({ silentMode: true });
-      });
-      
-      // Clear previous notification calls
-      chrome.notifications.create.mockClear();
-      
-      messageCallback({
-        type: 'NEW_MESSAGE',
-        data: { messageCount: 1, totalUnread: 5, timestamp: Date.now() }
-      }, {}, jest.fn());
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Should not create notification for NEW_MESSAGE when silent
-      // Note: Only one call should exist (from initialization test notification)
-      const callsForNewMessage = chrome.notifications.create.mock.calls.filter(
-        call => !call[0].includes('test-notification')
-      );
-      expect(callsForNewMessage.length).toBe(0);
-    });
+  test('clears the badge without creating an alert when the unread count reaches zero', async () => {
+    loadBackgroundScript();
+    const onMessage = chrome.runtime.onMessage.addListener.mock.calls[0][0];
+
+    onMessage({ type: 'UNREAD_COUNT_CHANGED', data: { messageCount: 0, totalUnread: 0 } }, {}, jest.fn());
+    await flushAsyncWork();
+
+    expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ text: '' });
+    expect(chrome.notifications.create).not.toHaveBeenCalled();
   });
 
-  describe('Notification Click Handler', () => {
-    test('should register notification click listener', () => {
-      loadBackgroundScript();
-      expect(chrome.notifications.onClicked.addListener).toHaveBeenCalled();
-    });
+  test('caps oversized badge text while retaining the exact unread count for alerts', async () => {
+    loadBackgroundScript();
+    const onMessage = chrome.runtime.onMessage.addListener.mock.calls[0][0];
 
-    test('should focus existing messenger tab on click', () => {
-      loadBackgroundScript();
-      
-      const clickCallback = chrome.notifications.onClicked.addListener.mock.calls[0][0];
-      
-      const mockTab = { id: 123, windowId: 456 };
-      chrome.tabs.query.mockImplementation((query, callback) => {
-        callback([mockTab]);
-      });
-      
-      clickCallback('test-notification-id');
-      
-      expect(chrome.tabs.update).toHaveBeenCalledWith(123, { active: true });
-      expect(chrome.windows.update).toHaveBeenCalledWith(456, { focused: true });
-      expect(chrome.notifications.clear).toHaveBeenCalledWith('test-notification-id');
-    });
+    onMessage({ type: 'UNREAD_COUNT_CHANGED', data: { messageCount: 1, totalUnread: 1_000 } }, {}, jest.fn());
+    await flushAsyncWork();
 
-    test('should open a Facebook Messages tab if none exists', () => {
-      loadBackgroundScript();
-      
-      const clickCallback = chrome.notifications.onClicked.addListener.mock.calls[0][0];
-      
-      chrome.tabs.query.mockImplementation((query, callback) => {
-        callback([]);
-      });
-      
-      clickCallback('test-notification-id');
-      
-      expect(chrome.tabs.create).toHaveBeenCalledWith({ url: 'https://www.facebook.com/messages/' });
-    });
+    expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ text: '999+' });
+    expect(chrome.notifications.create).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ message: 'You have 1000 unread messages.' }),
+      expect.any(Function)
+    );
+  });
+
+  test('ignores malformed unread-count messages', async () => {
+    loadBackgroundScript();
+    const onMessage = chrome.runtime.onMessage.addListener.mock.calls[0][0];
+
+    onMessage({ type: 'UNREAD_COUNT_CHANGED', data: { messageCount: -1, totalUnread: '3' } }, {}, jest.fn());
+    await flushAsyncWork();
+
+    expect(chrome.action.setBadgeText).not.toHaveBeenCalled();
+    expect(chrome.notifications.create).not.toHaveBeenCalled();
+  });
+
+  test('creates a user-requested test notification', () => {
+    loadBackgroundScript();
+    const onMessage = chrome.runtime.onMessage.addListener.mock.calls[0][0];
+
+    onMessage({ type: 'TEST_NOTIFICATION' }, {}, jest.fn());
+
+    expect(chrome.notifications.create).toHaveBeenCalledWith(
+      expect.stringMatching(/^test-/),
+      expect.objectContaining({
+        type: 'basic',
+        iconUrl: expect.stringContaining('icon128.png'),
+        title: 'Messenger Notifications is ready'
+      }),
+      expect.any(Function)
+    );
+  });
+
+  test('focuses an existing Messenger tab when a notification is clicked', () => {
+    loadBackgroundScript();
+    chrome.tabs.query.mockImplementation((_query, callback) => callback([{ id: 12, windowId: 34 }]));
+    const onClicked = chrome.notifications.onClicked.addListener.mock.calls[0][0];
+
+    onClicked('message-id');
+
+    expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ text: '' });
+    expect(chrome.tabs.update).toHaveBeenCalledWith(12, { active: true });
+    expect(chrome.windows.update).toHaveBeenCalledWith(34, { focused: true });
+    expect(chrome.notifications.clear).toHaveBeenCalledWith('message-id');
+  });
+
+  test('opens Messenger when no matching tab exists', () => {
+    loadBackgroundScript();
+    const onClicked = chrome.notifications.onClicked.addListener.mock.calls[0][0];
+
+    onClicked('message-id');
+
+    expect(chrome.tabs.create).toHaveBeenCalledWith({ url: 'https://www.facebook.com/messages/' });
   });
 });

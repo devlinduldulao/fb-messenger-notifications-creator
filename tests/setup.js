@@ -1,80 +1,52 @@
-// Jest setup file - Chrome API mocks
+// Chrome API mocks shared by the extension tests.
 
-// Mock Chrome APIs
 global.chrome = {
   runtime: {
-    getURL: jest.fn((path) => `chrome-extension://test-extension-id/${path}`),
-    sendMessage: jest.fn((message, callback) => {
-      if (callback) callback({ received: true });
-    }),
-    onMessage: {
-      addListener: jest.fn(),
-      removeListener: jest.fn()
-    },
-    onInstalled: {
-      addListener: jest.fn()
-    },
-    getPlatformInfo: jest.fn((callback) => {
-      if (callback) callback({ os: 'win', arch: 'x86-64' });
-    }),
+    getURL: jest.fn(),
+    sendMessage: jest.fn(),
+    onMessage: { addListener: jest.fn() },
+    onInstalled: { addListener: jest.fn() },
     lastError: null
   },
   storage: {
-    sync: {
-      // Support both Promise-based and callback-based APIs
-      get: jest.fn((keys, callback) => {
-        const result = { silentMode: false };
-        if (callback) {
-          callback(result);
-          return undefined;
-        }
-        return Promise.resolve(result);
-      }),
-      set: jest.fn((items, callback) => {
-        if (callback) callback();
-        return Promise.resolve();
-      })
-    },
-    onChanged: {
-      addListener: jest.fn()
-    }
+    sync: { get: jest.fn(), set: jest.fn() },
+    onChanged: { addListener: jest.fn() }
   },
   notifications: {
-    create: jest.fn((id, options, callback) => {
-      if (callback) callback(id);
-    }),
-    clear: jest.fn((id, callback) => {
-      if (callback) callback(true);
-    }),
-    onClicked: {
-      addListener: jest.fn()
-    },
-    onClosed: {
-      addListener: jest.fn()
-    }
+    create: jest.fn(),
+    clear: jest.fn(),
+    onClicked: { addListener: jest.fn() }
   },
-  action: {
-    setBadgeText: jest.fn(),
-    setBadgeBackgroundColor: jest.fn()
-  },
+  action: { setBadgeText: jest.fn(), setBadgeBackgroundColor: jest.fn() },
   tabs: {
-    query: jest.fn((query, callback) => {
-      callback([]);
-    }),
+    query: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
-    get: jest.fn((tabId) => Promise.resolve({ url: 'https://example.com' })),
-    onActivated: {
-      addListener: jest.fn()
-    }
+    get: jest.fn(),
+    onActivated: { addListener: jest.fn() }
   },
-  windows: {
-    update: jest.fn()
-  }
+  windows: { update: jest.fn() }
 };
 
-// Reset all mocks before each test
 beforeEach(() => {
   jest.clearAllMocks();
   chrome.runtime.lastError = null;
+  chrome.runtime.getURL.mockImplementation((path) => `chrome-extension://test/${path}`);
+  chrome.runtime.sendMessage.mockImplementation((_message, callback) => callback?.({ received: true }));
+  chrome.storage.sync.get.mockImplementation((_keys, callback) => {
+    const result = { silentMode: false };
+    if (callback) {
+      callback(result);
+      return undefined;
+    }
+    return Promise.resolve(result);
+  });
+  chrome.storage.sync.set.mockImplementation((_items, callback) => {
+    callback?.();
+    return Promise.resolve();
+  });
+  chrome.notifications.create.mockImplementation((id, _options, callback) => callback?.(id));
+  chrome.notifications.clear.mockImplementation((_id, callback) => callback?.(true));
+  chrome.tabs.query.mockImplementation((_query, callback) => callback([]));
+  chrome.tabs.get.mockResolvedValue({ url: 'https://example.com/' });
 });

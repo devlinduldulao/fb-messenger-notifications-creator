@@ -15,24 +15,24 @@
     
     <section class="silent-mode-section">
       <div class="toggle-container">
-        <label class="toggle">
-          <input type="checkbox" id="silentModeToggle">
+        <label class="toggle" for="silentModeToggle">
+          <input type="checkbox" id="silentModeToggle" role="switch" aria-describedby="silentModeDescription">
           <span class="slider"></span>
         </label>
         <div class="toggle-label">
           <span class="toggle-title" id="silentModeLabel">Notifications ON</span>
-          <span class="toggle-description">Toggle silent mode when you need to focus</span>
+          <span class="toggle-description" id="silentModeDescription">Pause desktop alerts while keeping the unread badge visible.</span>
         </div>
       </div>
     </section>
     
     <section class="test-section">
-      <button id="testNotificationBtn" class="btn-test">Test Notification</button>
-      <p class="test-hint">Click to verify notifications are working</p>
+      <button type="button" id="testNotificationBtn" class="btn-test" aria-describedby="testNotificationHint">Test notification</button>
+      <p class="test-hint" id="testNotificationHint">Verify your browser notifications are working.</p>
     </section>
     
     <footer>
-      <p class="status" id="statusMessage"></p>
+      <p class="status" id="statusMessage" role="status" aria-live="polite"></p>
       <p class="footer-note">Works on facebook.com/messages and supports messenger.com during migration</p>
     </footer>
   </div>
